@@ -81,10 +81,10 @@ pub struct RawConfig {
 pub struct CommonConfig {
     frequency: u32,
     modulation: Modulation,
-    baud_rate_exponent: u8,
     baud_rate_mantissa: u8,
-    deviation_exponent: u8,
+    baud_rate_exponent: u8,
     deviation_mantissa: u8,
+    deviation_exponent: u8,
     sync_word: u32
 }
 
@@ -93,10 +93,10 @@ impl Default for CommonConfig {
         CommonConfig {
             frequency: 0xECC41E,
             modulation: Modulation::FSK2,
-            baud_rate_exponent: 0x04,
             baud_rate_mantissa: 0x22,
-            deviation_exponent: 0x04,
+            baud_rate_exponent: 0x04,
             deviation_mantissa: 0x07,
+            deviation_exponent: 0x04,
             sync_word: 0x091D3
         }
     }
@@ -106,8 +106,8 @@ impl Default for CommonConfig {
 #[derive(Debug, Clone, PartialEq)]
 pub struct RXConfig {
     common: CommonConfig,
-    bandwidth_exponent: u8,
     bandwidth_mantissa: u8,
+    bandwidth_exponent: u8,
     carrier_sense: u8,
     packet_length: u32,
 }
@@ -116,8 +116,8 @@ impl Default for RXConfig {
     fn default() -> RXConfig {
         RXConfig {
             common: CommonConfig::default(),
-            bandwidth_exponent: 0x02,
             bandwidth_mantissa: 0x00,
+            bandwidth_exponent: 0x02,
             carrier_sense: 33,
             packet_length: 1024
         }
@@ -156,6 +156,9 @@ impl CommonConfig {
         
         if let Some(sync_word) = sync_word {
             config.set_sync_word(sync_word)?;
+        }
+        else {
+            config.set_sync_word(0x00)?;
         }
 
         if let Some(deviation) = deviation {

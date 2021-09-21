@@ -29,10 +29,6 @@ ioctl!(read ioctl_get_tx_raw_conf with DEVICE_CHARACTER, Ioctl::GetTXRawConf; Ra
 ioctl!(read ioctl_get_rx_raw_conf with DEVICE_CHARACTER, Ioctl::GetRXRawConf; RawConfig);
 ioctl!(read ioctl_get_dev_raw_conf with DEVICE_CHARACTER, Ioctl::GetDevRawConf; RawConfig);
 
-const EINVAL: i32 = - libc::EINVAL;
-const ENOMEM: i32 = - libc::ENOMEM;
-const EFAULT: i32 = - libc::EFAULT;
-
 pub fn get_version(cc1101: &File) -> Result<u32, CC1101Error> {
     let mut version = 0;
 
@@ -40,7 +36,7 @@ pub fn get_version(cc1101: &File) -> Result<u32, CC1101Error> {
 
     match status {
         0 => Ok(version),
-        EINVAL => Err(CC1101Error::Device(DeviceError::InvalidIOCTL)),
+        libc::EIO => Err(CC1101Error::Device(DeviceError::InvalidIOCTL)),
         _ => Err(CC1101Error::Device(DeviceError::Unknown))
     }
 }
@@ -51,7 +47,7 @@ pub fn reset(cc1101: &File) -> Result<(), CC1101Error> {
 
     match status {
         0 => Ok(()),
-        EINVAL => Err(CC1101Error::Device(DeviceError::InvalidIOCTL)),
+        libc::EIO => Err(CC1101Error::Device(DeviceError::InvalidIOCTL)),
         _ => Err(CC1101Error::Device(DeviceError::Unknown))
     }
 }
@@ -67,7 +63,7 @@ pub fn get_raw_conf(cc1101: &File, config_type: RawConfigType) -> Result<RawConf
     
     match status {
         0 => Ok(config),
-        EINVAL => Err(CC1101Error::Device(DeviceError::InvalidIOCTL)),
+        libc::EIO => Err(CC1101Error::Device(DeviceError::InvalidIOCTL)),
         _ => Err(CC1101Error::Device(DeviceError::Unknown))
     }
 }
@@ -79,7 +75,7 @@ pub fn get_tx_conf(cc1101: &File) -> Result<TXConfig, CC1101Error> {
 
     match status {
         0 => Ok(tx_config),
-        EINVAL => Err(CC1101Error::Device(DeviceError::InvalidIOCTL)),
+        libc::EIO => Err(CC1101Error::Device(DeviceError::InvalidIOCTL)),
         _ => Err(CC1101Error::Device(DeviceError::Unknown))
     }
 }
@@ -91,7 +87,7 @@ pub fn get_rx_conf(cc1101: &File) -> Result<RXConfig, CC1101Error> {
 
     match status {
         0 => Ok(rx_config),
-        EINVAL => Err(CC1101Error::Device(DeviceError::InvalidIOCTL)),
+        libc::EIO => Err(CC1101Error::Device(DeviceError::InvalidIOCTL)),
         _ => Err(CC1101Error::Device(DeviceError::Unknown))
     }
 }
@@ -102,11 +98,10 @@ pub fn set_rx_conf(cc1101: &File, rx_config: &RXConfig) -> Result<(), CC1101Erro
 
     match status {
         0 => Ok(()),
-        EINVAL => Err(CC1101Error::Device(DeviceError::InvalidIOCTL)),
-        EFAULT => Err(CC1101Error::Device(DeviceError::Copy)),
-        //EINVAL => Err(CC1101Error::Device(DeviceError::InvalidConfig)),
-        ENOMEM => Err(CC1101Error::Device(DeviceError::OutOfMemory)),
-
+        libc::EIO => Err(CC1101Error::Device(DeviceError::InvalidIOCTL)),
+        libc::EFAULT => Err(CC1101Error::Device(DeviceError::Copy)),
+        libc::EINVAL => Err(CC1101Error::Device(DeviceError::InvalidConfig)),
+        libc::ENOMEM => Err(CC1101Error::Device(DeviceError::OutOfMemory)),
         _ => Err(CC1101Error::Device(DeviceError::Unknown))
     }
 }
@@ -117,9 +112,9 @@ pub fn set_tx_conf(cc1101: &File, tx_config: &TXConfig) -> Result<(), CC1101Erro
 
     match status {
         0 => Ok(()),
-        EINVAL => Err(CC1101Error::Device(DeviceError::InvalidIOCTL)),
-        EFAULT => Err(CC1101Error::Device(DeviceError::Copy)),
-        //EINVAL => Err(CC1101Error::Device(DeviceError::InvalidConfig)),
+        libc::EIO => Err(CC1101Error::Device(DeviceError::InvalidIOCTL)),
+        libc::EFAULT => Err(CC1101Error::Device(DeviceError::Copy)),
+        libc::EINVAL => Err(CC1101Error::Device(DeviceError::InvalidConfig)),
         _ => Err(CC1101Error::Device(DeviceError::Unknown))
     }
 }

@@ -5,13 +5,7 @@ use std::fs::File;
 use std::io::{Read,Write};
 use config::{TXConfig, RXConfig, RawConfig, RawConfigType};
 
-const EINVAL: i32 = - libc::EINVAL;
-const ENOMEM: i32 = - libc::ENOMEM;
-const EFAULT: i32 = - libc::EFAULT;
-const EBUSY: i32 = - libc::EBUSY;
-const ENOMSG: i32 = - libc::ENOMSG;
-
-const VERSION: u32 = 1;
+const VERSION: u32 = 2;
 
 #[derive(Debug)]
 pub enum DeviceError {
@@ -25,7 +19,7 @@ pub enum DeviceError {
     InvalidConfig,
     OutOfMemory,
     BufferEmpty,
-    PacketTooLarge,
+    PacketSize,
     Unknown
 }
 
@@ -57,13 +51,13 @@ impl CC1101 {
 
         let handle = Self::open(device)?;
 
-        if let Some(rx_config) = rx_config {
-            Self::set_rx_config_on_device(&handle, &None, &rx_config, blocking)?;
+        if let Some(rx_config) = &rx_config {
+            Self::set_rx_config_on_device(&handle, &None, rx_config, blocking)?;
         }
 
         match blocking {
-            true => Ok(CC1101{device: device.to_string(), handle: Some(handle), rx_config: None}),
-            false => Ok(CC1101{device: device.to_string(), handle: None, rx_config: None})
+            true => Ok(CC1101{device: device.to_string(), handle: Some(handle), rx_config: rx_config}),
+            false => Ok(CC1101{device: device.to_string(), handle: None, rx_config: rx_config})
         }
     }
 
@@ -72,8 +66,10 @@ impl CC1101 {
             Ok(file) => file,
             Err(e) => {
                 match e.raw_os_error() {
-                    Some(EBUSY) => return Err(CC1101Error::Device(DeviceError::Busy)), 
-                    _ => return Err(CC1101Error::Device(DeviceError::Unknown))
+                    Some(libc::EBUSY) => return Err(CC1101Error::Device(DeviceError::Busy)), 
+                    _ => {
+                        return Err(CC1101Error::Device(DeviceError::Unknown))
+                    }
                 }
             }
         };
@@ -169,9 +165,9 @@ impl CC1101 {
             Ok(_) => Ok(()),
             Err(e) => {
                 match e.raw_os_error() {
-                    Some(EINVAL) => Err(CC1101Error::Device(DeviceError::PacketTooLarge)),
-                    Some(ENOMEM) => Err(CC1101Error::Device(DeviceError::OutOfMemory)),
-                    Some(EFAULT) => Err(CC1101Error::Device(DeviceError::Copy)),
+                    Some(libc::EINVAL) => Err(CC1101Error::Device(DeviceError::PacketSize)),
+                    Some(libc::ENOMEM) => Err(CC1101Error::Device(DeviceError::OutOfMemory)),
+                    Some(libc::EFAULT) => Err(CC1101Error::Device(DeviceError::Copy)),
                     _ => Err(CC1101Error::Device(DeviceError::Unknown))
                 }
             }
@@ -193,10 +189,14 @@ impl CC1101 {
                     },
                     Err(e) => {
                         match e.raw_os_error() {
-                            Some(ENOMSG) => break,
-                            Some(EINVAL) => return Err(CC1101Error::Device(DeviceError::InvalidConfig)),
-                            Some(EFAULT) => return Err(CC1101Error::Device(DeviceError::Copy)),
-                            _ => return Err(CC1101Error::Device(DeviceError::Unknown))
+                            Some(libc::ENOMSG) => break,
+                            Some(libc::EMSGSIZE) => return Err(CC1101Error::Device(DeviceError::PacketSize)),
+                            Some(libc::EBUSY) => return Err(CC1101Error::Device(DeviceError::Busy)),
+                            Some(libc::EINVAL) => return Err(CC1101Error::Device(DeviceError::InvalidConfig)),
+                            Some(libc::EFAULT) => return Err(CC1101Error::Device(DeviceError::Copy)),
+                            _ => {
+                                return Err(CC1101Error::Device(DeviceError::Unknown));
+                            }
                         }
                     }
                 }
