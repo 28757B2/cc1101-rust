@@ -1,7 +1,7 @@
 pub mod config;
 mod ioctl;
 
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::{Read,Write};
 use config::{TXConfig, RXConfig, RawConfig, RawConfigType};
 
@@ -56,13 +56,14 @@ impl CC1101 {
         }
 
         match blocking {
-            true => Ok(CC1101{device: device.to_string(), handle: Some(handle), rx_config: rx_config}),
-            false => Ok(CC1101{device: device.to_string(), handle: None, rx_config: rx_config})
+            true => Ok(CC1101{device: device.to_string(), handle: Some(handle), rx_config}),
+            false => Ok(CC1101{device: device.to_string(), handle: None, rx_config})
         }
     }
 
     fn open(device: &str) -> Result<File, CC1101Error> {
-        let handle = match File::open(device) {
+
+        let handle = match OpenOptions::new().read(true).write(true).open(device) {
             Ok(file) => file,
             Err(e) => {
                 match e.raw_os_error() {
@@ -161,7 +162,7 @@ impl CC1101 {
 
         Self::set_tx_config_on_device(&handle, tx_config)?;
 
-        match handle.write_all(data) {
+        match handle.write(data) {
             Ok(_) => Ok(()),
             Err(e) => {
                 match e.raw_os_error() {
