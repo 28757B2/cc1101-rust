@@ -1,12 +1,16 @@
+//! This project provides an interface to the [CC1101 Linux Driver](https://github.com/28757B2/cc1101-driver) to allow receiving and transmitting packets from Rust.
+
 pub mod config;
 mod ioctl;
 
 use std::fs::{File, OpenOptions};
 use std::io::{Read,Write};
-use config::{TXConfig, RXConfig, RawConfig, RawConfigType};
+use config::{TXConfig, RXConfig, Registers, RegistersType};
 
+// Driver version
 const VERSION: u32 = 2;
 
+/// Errors encountered while communicating with the CC1101 driver
 #[derive(Debug)]
 pub enum DeviceError {
     NoDevice,
@@ -23,6 +27,7 @@ pub enum DeviceError {
     Unknown
 }
 
+/// Errors caused by device configuration
 #[derive(Debug)]
 pub enum ConfigError {
     InvalidFrequency,
@@ -34,12 +39,14 @@ pub enum ConfigError {
     InvalidSyncWord
 }
 
+/// Generic error type for errors thrown by the module
 #[derive(Debug)]
 pub enum CC1101Error {
     Device(DeviceError),
     Config(ConfigError)
 }
 
+/// CC1101 radio device
 pub struct CC1101 {
     device: String,
     handle: Option<File>,
@@ -47,6 +54,19 @@ pub struct CC1101 {
 }
 
 impl CC1101 {
+
+    /// Create a new handle to a CC1101 device
+    /// 
+    /// Providing an `rx_config` immediately configures the device driver to receive with the provided configuration. Received packets can be read using [`CC1101::receive`].
+    /// 
+    /// `blocking` determines if the file handle to the device should be kept open. This prevents another process from using the radio (and reconfiguring it), but prevents multiplexing of transmit/recieve between two processes on the same device.
+    /// 
+    /// # Example
+    /// 
+    /// ```
+    /// let rx_config = RXConfig::new(433.92, Modulation::OOK, 1.0, None, None, 64, None, None)?;
+    /// let cc1101 = CC1101::new("/dev/cc1101.0.0", Some(rx_config), false)?;    
+    /// ```
     pub fn new(device: &str, rx_config: Option<RXConfig>, blocking: bool) -> Result<CC1101, CC1101Error> {
 
         let handle = Self::open(device)?;
@@ -61,6 +81,7 @@ impl CC1101 {
         }
     }
 
+    /// Open a file handle to the device
     fn open(device: &str) -> Result<File, CC1101Error> {
 
         let handle = match OpenOptions::new().read(true).write(true).open(device) {
@@ -84,6 +105,9 @@ impl CC1101 {
         Ok(handle)
     }
 
+    /// Get a handle to the device.
+    /// 
+    /// Etiher re-use the existing handle if in blocking mode, or create a new one.
     fn get_handle(&self) -> Result<File, CC1101Error> {
         if let Some(handle) = &self.handle {
             match handle.try_clone() {
@@ -96,10 +120,12 @@ impl CC1101 {
         }
     }
 
+    /// Issue a reset command to the device, setting it to idle
     pub fn reset(&mut self) -> Result<(), CC1101Error> {
         ioctl::reset(&self.get_handle()?)
     }
 
+    /// Set the transmit configuration
     pub fn set_tx_config(&mut self, tx_config: &TXConfig) -> Result<(), CC1101Error> {
         Self::set_tx_config_on_device(&self.get_handle()?, tx_config)
     }
@@ -108,6 +134,7 @@ impl CC1101 {
         ioctl::set_tx_conf(handle, tx_config)
     }
 
+    /// Set the receive configuration
     pub fn set_rx_config(&mut self, rx_config: &RXConfig) -> Result<(), CC1101Error>{
         Self::set_rx_config_on_device(&self.get_handle()?, &self.rx_config, rx_config, self.handle.is_some())?;
         self.rx_config = Some(rx_config.clone());
@@ -140,22 +167,40 @@ impl CC1101 {
         Ok(())
     }
 
+    /// Get the configured receive config
     pub fn get_rx_config(&self) -> &Option<RXConfig> {
         &self.rx_config
     }
 
+    /// Get the transmit config currently configured on the device
     pub fn get_device_tx_config(&mut self) -> Result<TXConfig, CC1101Error> {
         ioctl::get_tx_conf(&self.get_handle()?)
     }
 
+    /// Get the receive config currently configured on the device
+    /// 
+    /// In non-blocking mode, this may differ from the value returned by [`CC1101::get_rx_config`] if another process has reconfigured the device
     pub fn get_device_rx_config(&mut self) -> Result<RXConfig, CC1101Error> {
         ioctl::get_rx_conf(&self.get_handle()?)
     }
 
-    pub fn get_device_raw_config(&self, config_type: RawConfigType) -> Result<RawConfig, CC1101Error> {
-        ioctl::get_raw_conf(&self.get_handle()?, config_type)
+    /// Get the set of CC1101 registers currently configured on the device
+    pub fn get_device_registers(&self, registers_type: RegistersType) -> Result<Registers, CC1101Error> {
+        ioctl::get_registers(&self.get_handle()?, registers_type)
     }
 
+    /// Transmit a packet using the radio
+    /// 
+    /// # Example
+    /// ```
+    /// const PACKET: [u8; 11] = [0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f];       
+    /// let tx_config = TXConfig::new(433.92, Modulation::OOK, 1.0, None, None, 0.1)?;
+    /// 
+    /// let cc1101 = CC1101::new("/dev/cc1101.0.0", None, false)?;
+    /// 
+    /// cc1101.transmit(&tx_config, &PACKET)?;
+    /// ```
+    /// 
     pub fn transmit(&self, tx_config: &TXConfig, data: &[u8]) -> Result<(), CC1101Error> {
         
         let mut handle = self.get_handle()?;
@@ -175,6 +220,22 @@ impl CC1101 {
         }
     }
 
+    /// Configure and receive packets from the radio
+    /// 
+    /// # Example
+    /// 
+    /// ```
+    /// let rx_config = RXConfig::new(433.92, Modulation::OOK, 1.0, None, None, 64, None, None)?;
+    /// let cc1101 = CC1101::new("/dev/cc1101.0.0", Some(rx_config), false)?;
+    /// 
+    /// loop {
+    ///     let packets = cc1101.receive()?;
+    ///     for packet in packets {
+    ///         println!("Received - {:x?}", packet);
+    ///     }
+    ///     thread::sleep(time::Duration::from_millis(100));
+    /// }
+    /// ```
     pub fn receive(&self) -> Result<Vec<Vec<u8>>, CC1101Error> {
 
         if let Some(rx_config) = &self.rx_config {

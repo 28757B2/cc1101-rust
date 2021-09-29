@@ -3,7 +3,7 @@ use std::fs::File;
 use std::os::unix::io::AsRawFd;
 
 use crate::{CC1101Error, DeviceError};
-use crate::config::{RXConfig, TXConfig, RawConfig, RawConfigType};
+use crate::config::{RXConfig, TXConfig, Registers, RegistersType};
 
 const DEVICE_CHARACTER: u8 = b'c';
 
@@ -25,9 +25,9 @@ ioctl!(write ioctl_set_tx_conf with DEVICE_CHARACTER, Ioctl::SetTXConf; TXConfig
 ioctl!(write ioctl_set_rx_conf with DEVICE_CHARACTER, Ioctl::SetRXConf; RXConfig);
 ioctl!(read ioctl_get_tx_conf with DEVICE_CHARACTER, Ioctl::GetTXConf; TXConfig);
 ioctl!(read ioctl_get_rx_conf with DEVICE_CHARACTER, Ioctl::GetRXConf; RXConfig);
-ioctl!(read ioctl_get_tx_raw_conf with DEVICE_CHARACTER, Ioctl::GetTXRawConf; RawConfig);
-ioctl!(read ioctl_get_rx_raw_conf with DEVICE_CHARACTER, Ioctl::GetRXRawConf; RawConfig);
-ioctl!(read ioctl_get_dev_raw_conf with DEVICE_CHARACTER, Ioctl::GetDevRawConf; RawConfig);
+ioctl!(read ioctl_get_tx_raw_conf with DEVICE_CHARACTER, Ioctl::GetTXRawConf; Registers);
+ioctl!(read ioctl_get_rx_raw_conf with DEVICE_CHARACTER, Ioctl::GetRXRawConf; Registers);
+ioctl!(read ioctl_get_dev_raw_conf with DEVICE_CHARACTER, Ioctl::GetDevRawConf; Registers);
 
 pub fn get_version(cc1101: &File) -> Result<u32, CC1101Error> {
     let mut version = 0;
@@ -52,13 +52,13 @@ pub fn reset(cc1101: &File) -> Result<(), CC1101Error> {
     }
 }
 
-pub fn get_raw_conf(cc1101: &File, config_type: RawConfigType) -> Result<RawConfig, CC1101Error> {
-    let mut config = RawConfig::default();
+pub fn get_registers(cc1101: &File, config_type: RegistersType) -> Result<Registers, CC1101Error> {
+    let mut config = Registers::default();
 
     let status = match config_type {
-        RawConfigType::Device => unsafe { ioctl_get_dev_raw_conf(cc1101.as_raw_fd(), &mut config) },
-        RawConfigType::Tx => unsafe { ioctl_get_tx_raw_conf(cc1101.as_raw_fd(), &mut config) },
-        RawConfigType::Rx => unsafe { ioctl_get_rx_raw_conf(cc1101.as_raw_fd(), &mut config) }
+        RegistersType::Device => unsafe { ioctl_get_dev_raw_conf(cc1101.as_raw_fd(), &mut config) },
+        RegistersType::Tx => unsafe { ioctl_get_tx_raw_conf(cc1101.as_raw_fd(), &mut config) },
+        RegistersType::Rx => unsafe { ioctl_get_rx_raw_conf(cc1101.as_raw_fd(), &mut config) }
     };
     
     match status {
