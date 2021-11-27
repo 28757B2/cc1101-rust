@@ -17,6 +17,8 @@ enum Ioctl {
     GetRXConf = 6,
     GetRXRawConf = 7,
     GetDevRawConf = 8,
+    GetRSSI = 9,
+    GetMaxPacketSize = 10
 }
 
 ioctl!(read ioctl_get_version with DEVICE_CHARACTER, Ioctl::GetVersion; u32);
@@ -28,6 +30,8 @@ ioctl!(read ioctl_get_rx_conf with DEVICE_CHARACTER, Ioctl::GetRXConf; RXConfig)
 ioctl!(read ioctl_get_tx_raw_conf with DEVICE_CHARACTER, Ioctl::GetTXRawConf; Registers);
 ioctl!(read ioctl_get_rx_raw_conf with DEVICE_CHARACTER, Ioctl::GetRXRawConf; Registers);
 ioctl!(read ioctl_get_dev_raw_conf with DEVICE_CHARACTER, Ioctl::GetDevRawConf; Registers);
+ioctl!(read ioctl_get_rssi with DEVICE_CHARACTER, Ioctl::GetRSSI; u8);
+ioctl!(read ioctl_get_max_packet_size with DEVICE_CHARACTER, Ioctl::GetMaxPacketSize; u32);
 
 pub fn get_version(cc1101: &File) -> Result<u32, CC1101Error> {
     let mut version = 0;
@@ -112,6 +116,30 @@ pub fn set_tx_conf(cc1101: &File, tx_config: &TXConfig) -> Result<(), CC1101Erro
         libc::EIO => Err(CC1101Error::Device(DeviceError::InvalidIOCTL)),
         libc::EFAULT => Err(CC1101Error::Device(DeviceError::Copy)),
         libc::EINVAL => Err(CC1101Error::Device(DeviceError::InvalidConfig)),
+        _ => Err(CC1101Error::Device(DeviceError::Unknown)),
+    }
+}
+
+pub fn get_rssi(cc1101: &File) -> Result<u8, CC1101Error> {
+    let mut rssi = 0;
+
+    let status = unsafe { ioctl_get_rssi(cc1101.as_raw_fd(), &mut rssi) };
+
+    match status {
+        0 => Ok(rssi),
+        libc::EIO => Err(CC1101Error::Device(DeviceError::InvalidIOCTL)),
+        _ => Err(CC1101Error::Device(DeviceError::Unknown)),
+    }
+}
+
+pub fn get_max_packet_size(cc1101: &File) -> Result<u32, CC1101Error> {
+    let mut max_packet_size = 0;
+
+    let status = unsafe { ioctl_get_max_packet_size(cc1101.as_raw_fd(), &mut max_packet_size) };
+
+    match status {
+        0 => Ok(max_packet_size),
+        libc::EIO => Err(CC1101Error::Device(DeviceError::InvalidIOCTL)),
         _ => Err(CC1101Error::Device(DeviceError::Unknown)),
     }
 }

@@ -21,7 +21,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 
 // Driver version
-const VERSION: u32 = 2;
+const VERSION: u32 = 3;
 
 /// Errors encountered during communication with the CC1101 driver
 #[derive(Debug)]
@@ -50,6 +50,9 @@ pub enum ConfigError {
     InvalidBaudRate,
     InvalidDeviation,
     InvalidSyncWord,
+    InvalidMaxLNAGain,
+    InvalidMaxDVGAGain,
+    InvalidMagnTarget
 }
 
 /// Generic type for errors thrown by the module
@@ -121,7 +124,7 @@ impl CC1101 {
     ///
     /// ```
     /// # use cc1101_rust::{CC1101, config::{RXConfig, Modulation}};
-    /// let rx_config = RXConfig::new(433.92, Modulation::OOK, 1.0, 64, None, None, None, None)?;
+    /// let rx_config = RXConfig::new(433.92, Modulation::OOK, 1.0, 64, None, None, None, None, None, None, None)?;
     /// let cc1101 = CC1101::new("/dev/cc1101.0.0", Some(rx_config), false)?;
     /// # Ok::<(), cc1101_rust::CC1101Error>(())
     /// ```
@@ -150,6 +153,19 @@ impl CC1101 {
         }
     }
 
+    /// Get the current RSSI value from the radio
+    pub fn get_rssi(&self) -> Result<u8, CC1101Error> {
+        let handle = self.get_handle()?;
+        ioctl::get_rssi(&handle)
+    }
+
+    /// Get the maximum packet size configured in the driver
+    pub fn get_max_packet_size(&self) -> Result<u32, CC1101Error> {
+        let handle = self.get_handle()?;
+        ioctl::get_max_packet_size(&handle)
+    }
+    
+
     /// Receive packets from the radio
     ///
     /// This will read the content of the driver's received packet buffer if the driver is already in RX.
@@ -165,7 +181,7 @@ impl CC1101 {
     /// ```no_run
     /// # use std::{thread, time};
     /// # use cc1101_rust::{CC1101, config::{RXConfig, Modulation}};
-    /// let rx_config = RXConfig::new(433.92, Modulation::OOK, 1.0, 64, None, None, None, None)?;
+    /// let rx_config = RXConfig::new(433.92, Modulation::OOK, 1.0, 64, None, None, None, None, None, None, None)?;
     /// let cc1101 = CC1101::new("/dev/cc1101.0.0", Some(rx_config), false)?;
     ///
     /// loop {

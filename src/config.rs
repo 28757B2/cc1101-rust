@@ -21,6 +21,21 @@ pub enum Modulation {
     MSK = 7,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum CarrierSense {
+    Disabled,
+    Relative(i8),
+    Absolute(i8)
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[repr(u8)]
+enum CarrierSenseMode {
+    Disabled = 0,
+    Relative = 1,
+    Absolute = 2
+}
+
 /// Device / driver register types
 #[derive(Copy, Clone)]
 pub enum RegistersType {
@@ -167,7 +182,11 @@ pub struct RXConfig {
     common: CommonConfig,
     bandwidth_mantissa: u8,
     bandwidth_exponent: u8,
-    carrier_sense: u8,
+    max_lna_gain: u8,
+    max_dvga_gain: u8,
+    magn_target: u8,
+    carrier_sense_mode: CarrierSenseMode,
+    carrier_sense: i8,
     packet_length: u32,
 }
 
@@ -177,7 +196,11 @@ impl Default for RXConfig {
             common: CommonConfig::default(),
             bandwidth_mantissa: 0x00,
             bandwidth_exponent: 0x02,
-            carrier_sense: 33,
+            max_lna_gain: 0,
+            max_dvga_gain: 0,
+            magn_target: 33,
+            carrier_sense_mode: CarrierSenseMode::Relative,
+            carrier_sense: 10,
             packet_length: 1024,
         }
     }
@@ -422,7 +445,7 @@ impl RXConfig {
     ///
     /// ```
     /// # use cc1101_rust::config::{RXConfig, Modulation};
-    /// let config = RXConfig::new(433.92, Modulation::OOK, 1.0, 1024, None, None, None, None)?;
+    /// let config = RXConfig::new(433.92, Modulation::OOK, 1.0, 1024, None, None, None, None, None, None, None)?;
     /// # Ok::<(), cc1101_rust::CC1101Error>(())
     /// ```
     #[allow(clippy::too_many_arguments)]
@@ -434,7 +457,10 @@ impl RXConfig {
         deviation: Option<f32>,
         sync_word: Option<u32>,
         bandwidth: Option<f32>,
-        carrier_sense: Option<u8>,
+        carrier_sense: Option<CarrierSense>,
+        max_lna_gain: Option<u8>,
+        max_dvga_gain: Option<u8>,
+        magn_target: Option<u8>
     ) -> Result<RXConfig, CC1101Error> {
         let common = CommonConfig::new(frequency, modulation, baud_rate, deviation, sync_word)?;
 
@@ -450,6 +476,18 @@ impl RXConfig {
 
         if let Some(bandwidth) = bandwidth {
             rx_config.set_bandwidth(bandwidth)?;
+        }
+
+        if let Some(max_lna_gain) = max_lna_gain {
+            rx_config.set_max_lna_gain(max_lna_gain)?;
+        }
+
+        if let Some(max_dvga_gain) = max_dvga_gain {
+            rx_config.set_max_dvga_gain(max_dvga_gain)?;
+        }
+
+        if let Some(magn_target) = magn_target {
+            rx_config.set_magn_target(magn_target)?;
         }
 
         Ok(rx_config)
@@ -504,19 +542,98 @@ impl RXConfig {
 
     /// Sets the carrier sense threshold in dB.
     ///
-    /// Valid values are `17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48`
+    /// For [`CarrierSense::Relative`] an increase of 6, 10 or 14 dB can be specified. This will begin RX on a sudden increase in RSSI greather than or equal to this value.
     ///
-    /// When a sync word is provided, RX only begins when the carrier sense is above the threshold and the sync word has been received.
-    pub fn set_carrier_sense(&mut self, carrier_sense: u8) -> Result<(), CC1101Error> {
-        if !(17..=49).contains(&carrier_sense) {
-            return Err(CC1101Error::Config(ConfigError::InvalidCarrierSense));
+    /// For [`CarrierSense::Absolute`] a value between -7 dB and 7 dB can be set. When RSSI exceeds `magn_target` +/- this value, packet RX will begin.
+    /// `max_lna_gain` and `max_dvga_gain` will also require configuring to set the correct absolute RSSI value.
+    /// 
+    /// [`CarrierSense::Disabled`] does not use carrier sense. 
+    pub fn set_carrier_sense(&mut self, carrier_sense: CarrierSense) -> Result<(), CC1101Error> {
+        match carrier_sense {
+            CarrierSense::Disabled => {
+                self.carrier_sense_mode = CarrierSenseMode::Disabled;
+                self.carrier_sense = 0;
+            },
+            CarrierSense::Relative(carrier_sense) => {
+                match carrier_sense {
+                    6 | 10 | 14 => {
+                        self.carrier_sense_mode = CarrierSenseMode::Relative;
+                        self.carrier_sense = carrier_sense;
+                    }
+                    _ => return Err(CC1101Error::Config(ConfigError::InvalidCarrierSense))
+                }
+            },
+            CarrierSense::Absolute(carrier_sense) => {
+                match carrier_sense {
+                    -7..=7 => {
+                        self.carrier_sense_mode = CarrierSenseMode::Absolute;
+                        self.carrier_sense = carrier_sense;
+                    },
+                    _ => return Err(CC1101Error::Config(ConfigError::InvalidCarrierSense))
+                }
+            }
         }
         Ok(())
     }
 
     /// Get the configured carrier sense
-    pub fn get_carrier_sense(&self) -> u8 {
-        self.carrier_sense
+    pub fn get_carrier_sense(&self) -> CarrierSense {
+        match self.carrier_sense_mode {
+            CarrierSenseMode::Disabled => CarrierSense::Disabled,
+            CarrierSenseMode::Relative => CarrierSense::Relative(self.carrier_sense),
+            CarrierSenseMode::Absolute => CarrierSense::Absolute(self.carrier_sense)
+        }
+    }
+
+    /// Sets the amount to decrease the maximum LNA gain by approximately the specified amount in dB.
+    /// Valid values are `0, 3, 6, 7, 9, 12, 15, 17`
+    pub fn set_max_lna_gain(&mut self, max_lna_gain: u8) -> Result<(), CC1101Error> {
+        match max_lna_gain {
+            0 | 3 | 6 | 7 | 9 | 12 | 15 | 17 => {
+                self.max_lna_gain = max_lna_gain
+            },
+            _ => return Err(CC1101Error::Config(ConfigError::InvalidMaxLNAGain))
+        }
+        Ok(())
+    }
+
+    /// Get the configured maximum LNA gain
+    pub fn get_max_lna_gain(&self) -> u8 {
+        self.max_lna_gain
+    }
+
+    /// Sets the amount to decrease the maximum DVGA gain by approximately the specified amount in dB.
+    /// Valid values are `0, 6, 12, 18`
+    pub fn set_max_dvga_gain(&mut self, max_dvga_gain: u8) -> Result<(), CC1101Error> {
+        match max_dvga_gain {
+            0 | 6 | 12 | 18 => {
+                self.max_dvga_gain = max_dvga_gain
+            },
+            _ => return Err(CC1101Error::Config(ConfigError::InvalidMaxDVGAGain))
+        }
+        Ok(())
+    }
+
+    /// Get the configured maximum DVGA gain
+    pub fn get_max_dvga_gain(&self) -> u8 {
+        self.max_dvga_gain
+    }
+
+    /// Sets the target channel filter amplitude in dB
+    /// Valid values are `24, 27, 30, 33, 36, 38, 40, 42`
+    pub fn set_magn_target(&mut self, magn_target: u8) -> Result<(), CC1101Error> {
+        match magn_target {
+            24 | 27 | 30 | 33 | 36 | 38 | 40 | 42 => {
+                self.magn_target = magn_target
+            },
+            _ => return Err(CC1101Error::Config(ConfigError::InvalidMagnTarget))
+        }
+        Ok(())
+    }
+
+    /// Get the configured maximum DVGA gain
+    pub fn get_magn_target(&self) -> u8 {
+        self.magn_target
     }
 
     /// Set the length of packets to receive in bytes
