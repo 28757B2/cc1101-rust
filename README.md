@@ -1,5 +1,13 @@
 # cc1101-rust
 
-Work-in-progress interface to the [CC1101 Linux Driver](https://github.com/28757B2/cc1101-driver) to allow receiving and transmitting packets from Rust.
+This project provides an interface to the [CC1101 Linux Driver](https://github.com/28757B2/cc1101-driver) to allow receiving and transmitting packets from Rust.
 
-Requires the 1.3.0 driver
+## Usage
+
+Add the following to `Cargo.toml`:
+
+    [dependencies]
+    cc1101-rust = "0.1.0"
+
+
+See the [Documentation](https://docs.rs/cc1101-rust) for more details.

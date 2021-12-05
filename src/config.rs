@@ -544,7 +544,7 @@ impl RXConfig {
     /// For [`CarrierSense::Absolute`] a value between -7 dB and 7 dB can be set. When RSSI exceeds `magn_target` +/- this value, packet RX will begin.
     /// `max_lna_gain` and `max_dvga_gain` will also require configuring to set the correct absolute RSSI value.
     /// 
-    /// [`CarrierSense::Disabled`] does not use carrier sense. 
+    /// [`None`] disables carrier sense. 
     pub fn set_carrier_sense(&mut self, carrier_sense: Option<CarrierSense>) -> Result<(), CC1101Error> {
         match carrier_sense {
             Some(CarrierSense::Relative(carrier_sense)) => {
