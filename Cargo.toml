@@ -3,6 +3,8 @@ name = "cc1101-rust"
 version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
+description = "Rust interface to the CC1101 Linux driver"
+repository = "https://github.com/28757B2/cc1101-rust"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
