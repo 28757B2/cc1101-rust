@@ -23,7 +23,6 @@ pub enum Modulation {
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum CarrierSense {
-    Disabled,
     Relative(i8),
     Absolute(i8)
 }
@@ -470,9 +469,7 @@ impl RXConfig {
             ..RXConfig::default()
         };
 
-        if let Some(carrier_sense) = carrier_sense {
-            rx_config.set_carrier_sense(carrier_sense)?;
-        }
+        rx_config.set_carrier_sense(carrier_sense)?;
 
         if let Some(bandwidth) = bandwidth {
             rx_config.set_bandwidth(bandwidth)?;
@@ -548,13 +545,9 @@ impl RXConfig {
     /// `max_lna_gain` and `max_dvga_gain` will also require configuring to set the correct absolute RSSI value.
     /// 
     /// [`CarrierSense::Disabled`] does not use carrier sense. 
-    pub fn set_carrier_sense(&mut self, carrier_sense: CarrierSense) -> Result<(), CC1101Error> {
+    pub fn set_carrier_sense(&mut self, carrier_sense: Option<CarrierSense>) -> Result<(), CC1101Error> {
         match carrier_sense {
-            CarrierSense::Disabled => {
-                self.carrier_sense_mode = CarrierSenseMode::Disabled;
-                self.carrier_sense = 0;
-            },
-            CarrierSense::Relative(carrier_sense) => {
+            Some(CarrierSense::Relative(carrier_sense)) => {
                 match carrier_sense {
                     6 | 10 | 14 => {
                         self.carrier_sense_mode = CarrierSenseMode::Relative;
@@ -563,7 +556,7 @@ impl RXConfig {
                     _ => return Err(CC1101Error::Config(ConfigError::InvalidCarrierSense))
                 }
             },
-            CarrierSense::Absolute(carrier_sense) => {
+            Some(CarrierSense::Absolute(carrier_sense)) => {
                 match carrier_sense {
                     -7..=7 => {
                         self.carrier_sense_mode = CarrierSenseMode::Absolute;
@@ -572,16 +565,20 @@ impl RXConfig {
                     _ => return Err(CC1101Error::Config(ConfigError::InvalidCarrierSense))
                 }
             }
+            None => {
+                self.carrier_sense_mode = CarrierSenseMode::Disabled;
+                self.carrier_sense = 0;
+            },
         }
         Ok(())
     }
 
     /// Get the configured carrier sense
-    pub fn get_carrier_sense(&self) -> CarrierSense {
+    pub fn get_carrier_sense(&self) -> Option<CarrierSense> {
         match self.carrier_sense_mode {
-            CarrierSenseMode::Disabled => CarrierSense::Disabled,
-            CarrierSenseMode::Relative => CarrierSense::Relative(self.carrier_sense),
-            CarrierSenseMode::Absolute => CarrierSense::Absolute(self.carrier_sense)
+            CarrierSenseMode::Disabled => None,
+            CarrierSenseMode::Relative => Some(CarrierSense::Relative(self.carrier_sense)),
+            CarrierSenseMode::Absolute => Some(CarrierSense::Absolute(self.carrier_sense))
         }
     }
 
