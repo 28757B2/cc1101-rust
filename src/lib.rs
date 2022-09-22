@@ -52,7 +52,7 @@ pub enum ConfigError {
     InvalidSyncWord,
     InvalidMaxLNAGain,
     InvalidMaxDVGAGain,
-    InvalidMagnTarget
+    InvalidMagnTarget,
 }
 
 /// Generic type for errors thrown by the module
@@ -164,7 +164,6 @@ impl CC1101 {
         let handle = self.get_handle()?;
         ioctl::get_max_packet_size(&handle)
     }
-    
 
     /// Receive packets from the radio
     ///

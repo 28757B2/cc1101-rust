@@ -25,7 +25,7 @@ pub enum Modulation {
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum CarrierSense {
     Relative(i8),
-    Absolute(i8)
+    Absolute(i8),
 }
 
 impl fmt::Display for CarrierSense {
@@ -37,13 +37,12 @@ impl fmt::Display for CarrierSense {
     }
 }
 
-
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[repr(u8)]
 enum CarrierSenseMode {
     Disabled = 0,
     Relative = 1,
-    Absolute = 2
+    Absolute = 2,
 }
 
 /// Device / driver register types
@@ -174,11 +173,11 @@ pub struct CommonConfig {
 impl Default for CommonConfig {
     fn default() -> CommonConfig {
         CommonConfig {
-            frequency: 0x10B071,            // 433.92
+            frequency: 0x10B071, // 433.92
             modulation: Modulation::OOK,
-            baud_rate_mantissa: 0x43,       // 1.0 kBaud
+            baud_rate_mantissa: 0x43, // 1.0 kBaud
             baud_rate_exponent: 0x05,
-            deviation_mantissa: 0x07,       // 47.607422
+            deviation_mantissa: 0x07, // 47.607422
             deviation_exponent: 0x04,
             sync_word: 0x0,
         }
@@ -210,7 +209,7 @@ impl Default for RXConfig {
     fn default() -> RXConfig {
         RXConfig {
             common: CommonConfig::default(),
-            bandwidth_mantissa: 0x00,   // 203
+            bandwidth_mantissa: 0x00, // 203
             bandwidth_exponent: 0x02,
             max_lna_gain: 0,
             max_dvga_gain: 0,
@@ -224,10 +223,9 @@ impl Default for RXConfig {
 
 impl fmt::Display for RXConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-
         let carrier_sense = match Self::get_carrier_sense(self) {
             Some(v) => format!("{}", v),
-            None => "Disabled".to_owned()
+            None => "Disabled".to_owned(),
         };
 
         write!(f, "RXConfig: {{{}, Bandwidth: {} kHz, Max LNA Gain: {} dB, Max DVGA Gain: {} dB, Magn Target: {} dB, Carrier Sense: {}, Packet Length: {}}}", self.common, Self::get_bandwith(self), self.max_lna_gain, self.max_dvga_gain, self.magn_target, carrier_sense, self.packet_length)
@@ -236,27 +234,17 @@ impl fmt::Display for RXConfig {
 
 /// Configuration values specific to transmit
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct TXConfig {
     common: CommonConfig,
     tx_power: u8,
 }
 
-impl Default for TXConfig {
-    fn default() -> TXConfig {
-        TXConfig {
-            common: CommonConfig::default(),
-            tx_power: 0x00,
-        }
-    }
-}
-
 impl fmt::Display for TXConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-
         let tx_power = match Self::get_tx_power(self) {
             Ok(tx_power) => format!("{} dBm", tx_power),
-            Err(_) => format!("{:02x}", self.tx_power)
+            Err(_) => format!("{:02x}", self.tx_power),
         };
 
         write!(f, "TXConfig: {{{}, TX Power: {}}}", self.common, tx_power)
@@ -505,7 +493,7 @@ impl RXConfig {
         carrier_sense: Option<CarrierSense>,
         max_lna_gain: Option<u8>,
         max_dvga_gain: Option<u8>,
-        magn_target: Option<u8>
+        magn_target: Option<u8>,
     ) -> Result<RXConfig, CC1101Error> {
         let common = CommonConfig::new(frequency, modulation, baud_rate, deviation, sync_word)?;
 
@@ -589,32 +577,31 @@ impl RXConfig {
     ///
     /// For [`CarrierSense::Absolute`] a value between -7 dB and 7 dB can be set. When RSSI exceeds `magn_target` +/- this value, packet RX will begin.
     /// `max_lna_gain` and `max_dvga_gain` will also require configuring to set the correct absolute RSSI value.
-    /// 
-    /// [`None`] disables carrier sense. 
-    pub fn set_carrier_sense(&mut self, carrier_sense: Option<CarrierSense>) -> Result<(), CC1101Error> {
+    ///
+    /// [`None`] disables carrier sense.
+    pub fn set_carrier_sense(
+        &mut self,
+        carrier_sense: Option<CarrierSense>,
+    ) -> Result<(), CC1101Error> {
         match carrier_sense {
-            Some(CarrierSense::Relative(carrier_sense)) => {
-                match carrier_sense {
-                    6 | 10 | 14 => {
-                        self.carrier_sense_mode = CarrierSenseMode::Relative;
-                        self.carrier_sense = carrier_sense;
-                    }
-                    _ => return Err(CC1101Error::Config(ConfigError::InvalidCarrierSense))
+            Some(CarrierSense::Relative(carrier_sense)) => match carrier_sense {
+                6 | 10 | 14 => {
+                    self.carrier_sense_mode = CarrierSenseMode::Relative;
+                    self.carrier_sense = carrier_sense;
                 }
+                _ => return Err(CC1101Error::Config(ConfigError::InvalidCarrierSense)),
             },
-            Some(CarrierSense::Absolute(carrier_sense)) => {
-                match carrier_sense {
-                    -7..=7 => {
-                        self.carrier_sense_mode = CarrierSenseMode::Absolute;
-                        self.carrier_sense = carrier_sense;
-                    },
-                    _ => return Err(CC1101Error::Config(ConfigError::InvalidCarrierSense))
+            Some(CarrierSense::Absolute(carrier_sense)) => match carrier_sense {
+                -7..=7 => {
+                    self.carrier_sense_mode = CarrierSenseMode::Absolute;
+                    self.carrier_sense = carrier_sense;
                 }
-            }
+                _ => return Err(CC1101Error::Config(ConfigError::InvalidCarrierSense)),
+            },
             None => {
                 self.carrier_sense_mode = CarrierSenseMode::Disabled;
                 self.carrier_sense = 0;
-            },
+            }
         }
         Ok(())
     }
@@ -624,7 +611,7 @@ impl RXConfig {
         match self.carrier_sense_mode {
             CarrierSenseMode::Disabled => None,
             CarrierSenseMode::Relative => Some(CarrierSense::Relative(self.carrier_sense)),
-            CarrierSenseMode::Absolute => Some(CarrierSense::Absolute(self.carrier_sense))
+            CarrierSenseMode::Absolute => Some(CarrierSense::Absolute(self.carrier_sense)),
         }
     }
 
@@ -632,10 +619,8 @@ impl RXConfig {
     /// Valid values are `0, 3, 6, 7, 9, 12, 15, 17`
     pub fn set_max_lna_gain(&mut self, max_lna_gain: u8) -> Result<(), CC1101Error> {
         match max_lna_gain {
-            0 | 3 | 6 | 7 | 9 | 12 | 15 | 17 => {
-                self.max_lna_gain = max_lna_gain
-            },
-            _ => return Err(CC1101Error::Config(ConfigError::InvalidMaxLNAGain))
+            0 | 3 | 6 | 7 | 9 | 12 | 15 | 17 => self.max_lna_gain = max_lna_gain,
+            _ => return Err(CC1101Error::Config(ConfigError::InvalidMaxLNAGain)),
         }
         Ok(())
     }
@@ -649,10 +634,8 @@ impl RXConfig {
     /// Valid values are `0, 6, 12, 18`
     pub fn set_max_dvga_gain(&mut self, max_dvga_gain: u8) -> Result<(), CC1101Error> {
         match max_dvga_gain {
-            0 | 6 | 12 | 18 => {
-                self.max_dvga_gain = max_dvga_gain
-            },
-            _ => return Err(CC1101Error::Config(ConfigError::InvalidMaxDVGAGain))
+            0 | 6 | 12 | 18 => self.max_dvga_gain = max_dvga_gain,
+            _ => return Err(CC1101Error::Config(ConfigError::InvalidMaxDVGAGain)),
         }
         Ok(())
     }
@@ -666,10 +649,8 @@ impl RXConfig {
     /// Valid values are `24, 27, 30, 33, 36, 38, 40, 42`
     pub fn set_magn_target(&mut self, magn_target: u8) -> Result<(), CC1101Error> {
         match magn_target {
-            24 | 27 | 30 | 33 | 36 | 38 | 40 | 42 => {
-                self.magn_target = magn_target
-            },
-            _ => return Err(CC1101Error::Config(ConfigError::InvalidMagnTarget))
+            24 | 27 | 30 | 33 | 36 | 38 | 40 | 42 => self.magn_target = magn_target,
+            _ => return Err(CC1101Error::Config(ConfigError::InvalidMagnTarget)),
         }
         Ok(())
     }

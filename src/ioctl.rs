@@ -18,7 +18,7 @@ enum Ioctl {
     GetRXRawConf = 7,
     GetDevRawConf = 8,
     GetRSSI = 9,
-    GetMaxPacketSize = 10
+    GetMaxPacketSize = 10,
 }
 
 ioctl!(read ioctl_get_version with DEVICE_CHARACTER, Ioctl::GetVersion; u32);
