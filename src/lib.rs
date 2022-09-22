@@ -21,7 +21,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 
 // Driver version
-const VERSION: u32 = 3;
+const VERSION: u32 = 4;
 
 /// Errors encountered during communication with the CC1101 driver
 #[derive(Debug)]

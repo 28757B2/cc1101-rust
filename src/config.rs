@@ -4,6 +4,7 @@
 //!
 use crate::patable::{TX_POWERS_315, TX_POWERS_433, TX_POWERS_868, TX_POWERS_915};
 use crate::{CC1101Error, ConfigError};
+use std::fmt;
 
 /// Radio modulation mode
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -26,6 +27,16 @@ pub enum CarrierSense {
     Relative(i8),
     Absolute(i8)
 }
+
+impl fmt::Display for CarrierSense {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CarrierSense::Relative(v) => write!(f, "Relative(+{} dB)", v),
+            CarrierSense::Absolute(v) => write!(f, "Absolute({} dB)", v),
+        }
+    }
+}
+
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[repr(u8)]
@@ -163,14 +174,20 @@ pub struct CommonConfig {
 impl Default for CommonConfig {
     fn default() -> CommonConfig {
         CommonConfig {
-            frequency: 0xECC41E,
-            modulation: Modulation::FSK2,
-            baud_rate_mantissa: 0x22,
-            baud_rate_exponent: 0x04,
-            deviation_mantissa: 0x07,
+            frequency: 0x10B071,            // 433.92
+            modulation: Modulation::OOK,
+            baud_rate_mantissa: 0x43,       // 1.0 kBaud
+            baud_rate_exponent: 0x05,
+            deviation_mantissa: 0x07,       // 47.607422
             deviation_exponent: 0x04,
-            sync_word: 0x091D3,
+            sync_word: 0x0,
         }
+    }
+}
+
+impl fmt::Display for CommonConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "CommonConfig: {{Frequency: {} MHz, Modulation: {:?}, Baud Rate: {} kBaud, Deviation: {} kHz, Sync Word: 0x{:08x}}}", Self::get_frequency(self), self.modulation, Self::get_baud_rate(self), Self::get_deviation(self), self.sync_word)
     }
 }
 
@@ -193,15 +210,27 @@ impl Default for RXConfig {
     fn default() -> RXConfig {
         RXConfig {
             common: CommonConfig::default(),
-            bandwidth_mantissa: 0x00,
+            bandwidth_mantissa: 0x00,   // 203
             bandwidth_exponent: 0x02,
             max_lna_gain: 0,
             max_dvga_gain: 0,
             magn_target: 33,
             carrier_sense_mode: CarrierSenseMode::Relative,
-            carrier_sense: 10,
+            carrier_sense: 6,
             packet_length: 1024,
         }
+    }
+}
+
+impl fmt::Display for RXConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+
+        let carrier_sense = match Self::get_carrier_sense(self) {
+            Some(v) => format!("{}", v),
+            None => "Disabled".to_owned()
+        };
+
+        write!(f, "RXConfig: {{{}, Bandwidth: {} kHz, Max LNA Gain: {} dB, Max DVGA Gain: {} dB, Magn Target: {} dB, Carrier Sense: {}, Packet Length: {}}}", self.common, Self::get_bandwith(self), self.max_lna_gain, self.max_dvga_gain, self.magn_target, carrier_sense, self.packet_length)
     }
 }
 
@@ -219,6 +248,18 @@ impl Default for TXConfig {
             common: CommonConfig::default(),
             tx_power: 0x00,
         }
+    }
+}
+
+impl fmt::Display for TXConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+
+        let tx_power = match Self::get_tx_power(self) {
+            Ok(tx_power) => format!("{} dBm", tx_power),
+            Err(_) => format!("{:02x}", self.tx_power)
+        };
+
+        write!(f, "TXConfig: {{{}, TX Power: {}}}", self.common, tx_power)
     }
 }
 
@@ -404,6 +445,11 @@ impl CommonConfig {
         Ok(())
     }
 
+    /// Get the frequency deviation in kHz
+    pub fn get_deviation(&self) -> f32 {
+        CommonConfig::config_to_deviation(self.deviation_mantissa, self.deviation_exponent)
+    }
+
     /// Convert a sync word to a configuration value.
     fn sync_word_to_config(sync_word: u32) -> Result<u32, CC1101Error> {
         if sync_word > 0xFFFF {
@@ -455,7 +501,7 @@ impl RXConfig {
         packet_length: u32,
         deviation: Option<f32>,
         sync_word: Option<u32>,
-        bandwidth: Option<f32>,
+        bandwidth: Option<u32>,
         carrier_sense: Option<CarrierSense>,
         max_lna_gain: Option<u8>,
         max_dvga_gain: Option<u8>,
@@ -503,14 +549,14 @@ impl RXConfig {
     /// Convert a bandwidth configuration value to kHz.
     ///
     /// Uses the formula from section 13 of the datasheet
-    fn config_to_bandwidth(mantissa: u8, exponent: u8) -> f32 {
+    fn config_to_bandwidth(mantissa: u8, exponent: u8) -> u32 {
         let xtal_freq = XTAL_FREQ * 1000000.0;
         let bw_channel = xtal_freq / (8.0 * (mantissa as f32 + 4.0) * 2_f32.powi(exponent as i32));
-        bw_channel / 1000.0
+        (bw_channel / 1000.0) as u32
     }
 
     /// Convert a bandwidth in kHz to a configuration value
-    fn bandwidth_to_config(bandwidth: f32) -> Result<(u8, u8), CC1101Error> {
+    fn bandwidth_to_config(bandwidth: u32) -> Result<(u8, u8), CC1101Error> {
         for mantissa in 0..4 {
             for exponent in 0..4 {
                 #[allow(clippy::float_cmp)]
@@ -525,7 +571,7 @@ impl RXConfig {
     /// Set the configured bandwith in KHz
     ///
     /// Valid values are `58,67,81,101,116,135,162,203,232,270,325,406,464,541,650,812`
-    pub fn set_bandwidth(&mut self, bandwidth: f32) -> Result<(), CC1101Error> {
+    pub fn set_bandwidth(&mut self, bandwidth: u32) -> Result<(), CC1101Error> {
         let (mantissa, exponent) = RXConfig::bandwidth_to_config(bandwidth)?;
         self.bandwidth_mantissa = mantissa;
         self.bandwidth_exponent = exponent;
@@ -533,7 +579,7 @@ impl RXConfig {
     }
 
     /// Get the configured bandwidth
-    pub fn get_bandwith(&self) -> f32 {
+    pub fn get_bandwith(&self) -> u32 {
         RXConfig::config_to_bandwidth(self.bandwidth_mantissa, self.bandwidth_exponent)
     }
 
@@ -776,7 +822,7 @@ impl TXConfig {
     /// Get the TX power in dBm.
     ///
     /// Configured frequency must be within 1MHz of 315/433/868/915Mhz
-    pub fn get_tx_power(&mut self) -> Result<f32, CC1101Error> {
+    pub fn get_tx_power(&self) -> Result<f32, CC1101Error> {
         Self::config_to_tx_power(self.common.get_frequency(), self.tx_power)
     }
 
@@ -919,14 +965,14 @@ mod tests {
 
     #[test]
     fn test_bandwidth() -> Result<(), CC1101Error> {
-        assert_eq!(RXConfig::bandwidth_to_config(812.500000)?, (0x00, 0x00));
-        assert_eq!(RXConfig::bandwidth_to_config(58.035714)?, (0x03, 0x03));
+        assert_eq!(RXConfig::bandwidth_to_config(812)?, (0x00, 0x00));
+        assert_eq!(RXConfig::bandwidth_to_config(58)?, (0x03, 0x03));
 
-        assert_eq!(RXConfig::config_to_bandwidth(0x00, 0x00), 812.500000);
-        assert_eq!(RXConfig::config_to_bandwidth(0x03, 0x03), 58.035714);
+        assert_eq!(RXConfig::config_to_bandwidth(0x00, 0x00), 812);
+        assert_eq!(RXConfig::config_to_bandwidth(0x03, 0x03), 58);
 
-        assert!(RXConfig::bandwidth_to_config(0.0).is_err());
-        assert!(RXConfig::bandwidth_to_config(400.0).is_err());
+        assert!(RXConfig::bandwidth_to_config(0).is_err());
+        assert!(RXConfig::bandwidth_to_config(400).is_err());
 
         Ok(())
     }
