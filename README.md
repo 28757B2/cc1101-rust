@@ -7,7 +7,7 @@ This project provides an interface to the [CC1101 Linux Driver](https://github.c
 Add the following to `Cargo.toml`:
 
     [dependencies]
-    cc1101-rust = "0.1.0"
+    cc1101-rust = "0.2.1"
 
 
 See the [Documentation](https://docs.rs/cc1101-rust) for more details.
